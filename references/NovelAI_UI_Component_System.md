@@ -24,8 +24,9 @@ const NS = 'myscript';
 /** Namespaced ID for UI parts and extensions: id('status') -> 'myscript.status' */
 const id = (name: string): string => `${NS}.${name}`;
 
+/** Spacing and radii. Pick px or rem for a script and don't mix them. */
 const SPACE = { xs: '2px', sm: '4px', md: '8px', lg: '12px', xl: '16px' } as const;
-const RADIUS = { sm: '4px', md: '6px', lg: '10px' } as const;
+const RADIUS = { sm: '4px', md: '6px', lg: '12px' } as const;
 
 /** Semantic names for NovelAI theme tokens (replaced with the user's theme at render time). */
 const COLOR = {
@@ -45,7 +46,7 @@ const FONT = { body: 'default', heading: 'headings', mono: 'code', field: 'field
 
 > Use only real token names (see the token table in `SKILL.md`). `primary`, `error`, `textHeading`, and `textDescription` are **not** tokens. Invalid values produce invalid CSS that the browser silently drops.
 >
-> Tokens also work inside shorthand values (`border: '1px solid bg2'`). The docs only mention whole values, but this has been tested. The presets below set `borderColor` separately only so that variants can override just the color.
+> **Borders:** a theme token inside the `border` shorthand doesn't apply its color (`border: '1px solid bg2'` doesn't work). Set the width and style with `border: '1px solid'` (or `borderWidth` + `borderStyle`, as the presets below do), and always put the color in its own `borderColor`. That also lets variants override just the color.
 
 ---
 
@@ -66,8 +67,8 @@ const S: Record<string, Style> = {
     },
     heading: { color: COLOR.heading, fontFamily: FONT.heading, margin: `0 0 ${SPACE.md} 0` },
     body: { color: COLOR.body },
-    muted: { color: COLOR.muted, fontSize: '0.9em' },
-    mono: { fontFamily: FONT.mono, fontSize: '0.85em' },
+    muted: { color: COLOR.muted, fontSize: '12px' },
+    mono: { fontFamily: FONT.mono, fontSize: '12px' },
     gapRight: { marginRight: SPACE.sm },
 };
 
@@ -207,7 +208,7 @@ Keep a single `render()` that builds the whole extension from storage. Use stabl
 | One part's text/style/disabled state | `api.v1.ui.updateParts([{ type, id, ... }])` |
 | Structure (items added or removed, view switched) | `render()` → `api.v1.ui.update([...])` |
 
-Never call `render()` from a slider/number/text input's `onChange` (see guidelines pitfall 19).
+Never call `render()` from any input's `onChange` (text, multiline, number, slider, checkbox, code editor). It loses focus, drops keystrokes, resets anything open, and breaks slider callbacks (see guidelines pitfall 19).
 
 ```typescript
 const PANEL = { id: id('panel'), name: 'My Script', icon: 'feather' as IconId };
@@ -315,6 +316,9 @@ api.v1.hooks.register('onScriptsLoaded', async () => {
 
 - [ ] One `NS`; every part/extension ID goes through `id()`, and every storage key through `field()`
 - [ ] Colors only from `COLOR` (real theme tokens); spacing/radii only from `SPACE` / `RADIUS`
+- [ ] Border colors always in `borderColor`, never inside the `border` shorthand
+- [ ] Every size, spacing, and radius on the 4px/8px grid (multiples of 4 or 8, or the `1px`/`2px`/`6px` half-steps), all in px or all in rem
+- [ ] Every element comes from a factory or has its own named preset and `id()` (standard parts have no `class` prop)
 - [ ] Presets in `S`, combined with `sx()`; no one-off style objects in render code
 - [ ] Components built on `api.v1.ui.part.*` with an options object and variants
 - [ ] One `render()`; small changes go through `updateParts` or `{{templates}}`, never a full re-render from `onChange`

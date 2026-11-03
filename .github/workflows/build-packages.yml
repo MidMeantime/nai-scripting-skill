@@ -1,0 +1,75 @@
+name: Build skill packages
+
+# Rebuilds novel-ai-scripting.zip (files at the root) and novel-ai-scripting.skill
+# (files inside a novel-ai-scripting/ folder) from SKILL.md, CHANGELOG.md, and references/.
+#  - push to main: rebuild and commit the packages if they changed
+#  - pull request: build and attach the packages as a workflow artifact (nothing is committed)
+#  - release published: build from the release's tag and attach both files to the release
+#  - manual run: same as a push to the branch it runs on
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - SKILL.md
+      - CHANGELOG.md
+      - references/**
+      - scripts/build_packages.py
+      - .github/workflows/build-packages.yml
+  pull_request:
+    paths:
+      - SKILL.md
+      - CHANGELOG.md
+      - references/**
+      - scripts/build_packages.py
+      - .github/workflows/build-packages.yml
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-packages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build packages
+        run: python scripts/build_packages.py
+
+      - name: Upload packages as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-packages
+          path: |
+            novel-ai-scripting.skill
+            novel-ai-scripting.zip
+
+      - name: Commit rebuilt packages
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          if git diff --quiet -- novel-ai-scripting.skill novel-ai-scripting.zip; then
+            echo "Packages already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add novel-ai-scripting.skill novel-ai-scripting.zip
+          git commit -m "Rebuild skill packages"
+          git push
+
+      - name: Attach packages to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" novel-ai-scripting.skill novel-ai-scripting.zip --clobber

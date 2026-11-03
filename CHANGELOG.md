@@ -1,6 +1,31 @@
 # novel-ai-scripting: Changelog
 
-## v2 (2026-10-23), compared with v1
+Releases use semantic versioning (`1.0.0`, `1.1.0`, …). "v1" and "v2" below refer to the community docs this skill grew out of: release `1.0.0` is the v2 revision of those docs.
+
+## 1.1.0
+
+### Corrections
+
+- **Border colors don't work inside the `border` shorthand.** 1.0.0 said `border: '1px solid bg2'` was tested and worked. It doesn't apply the token's color. Every example now uses `border: '1px solid'` (or `borderWidth` + `borderStyle`) with the color in its own `borderColor`, and the claim is removed from "Verified in NovelAI" below.
+
+### New Rules
+
+- **Re-rendering (guidelines pitfall 19, rewritten):** never re-render the whole panel from any input's `onChange`. It now covers text, multiline, number, slider, checkbox, and code editor inputs (it used to focus on sliders and number inputs), lists the symptoms (lost focus, dropped keystrokes, reset dropdowns and sections, broken slider callbacks), and adds a "re-render as little as possible" table: templates, then `updateParts()`, then a full `ui.update()` only for structural changes. Also added to the `SKILL.md` key rules.
+- **CSS rules** (new subsection in `SKILL.md` §6 and guidelines pitfall 22, plus the component system checklist): border colors in `borderColor` only; every size, spacing, and radius on the 4px/8px grid (multiples of 4 or 8, plus `1px`/`2px`/`6px` half-steps), in px or the equivalent rem values but not mixed; every element comes from a factory or has a named preset and namespaced `id` (standard parts have no `class` prop).
+- **Input size checks** (new "Check the Input Size Before Every Generation" in the API docs, and `SKILL.md` §8): measure the prompt with the tokenizer against `maxTokens(model)` minus `max_tokens`, trim on purpose or stop, check the rate-limit budget, and measure early in generation-heavy scripts. Includes a type-checked `fitDocument()`/`summarize()` example.
+- **Lorebook entries** (API docs Lorebook section, and `SKILL.md` §8): always set `keys` and `forceActivation` explicitly when creating an entry, so it can't end up silently never activating.
+
+### Build
+
+- **Packages are built automatically.** `scripts/build_packages.py` builds `novel-ai-scripting.zip` (files at the root) and `novel-ai-scripting.skill` (files inside `novel-ai-scripting/`) reproducibly. The `Build skill packages` GitHub Action rebuilds and commits them on pushes to `main`, attaches them to published releases, and uploads them as an artifact on pull requests.
+
+### Example Fixes
+
+- Style examples keep their sizes except for off-grid values: `10px` became `12px` (paddings, the component system's `RADIUS.lg`, a decoration example), and two `5px` values became `4px`. Borders changed as described under Corrections. Font sizes in the component system and pitfall 15 use `12px` instead of `em`, so no example mixes units.
+- Pitfall 19's examples use `api.v1.ui.part.*` and type-check.
+- Removed two leftovers from a specific project (a script-specific storage key prefix and a version reference in pitfall 21).
+
+## 1.0.0 (2026-10-23): v2, compared with v1
 
 **v1** is the original four-file release from the community thread:
 - `NovelAI_TYPESCRIPT_GUIDELINES.md`
@@ -116,7 +141,7 @@ Replaced with the current official file. The main changes since v1:
 ### Other New Files
 
 - **`script_config_examples.ts`:** a script header covering every config type (string, multiline, number, boolean, select), plus a self-contained `readConfig()`/`renderPanel()` example.
-- **`NovelAI_UI_Component_System.md`:** namespace and `id()`; `COLOR`/`SPACE`/`RADIUS` tokens; presets combined with `sx()`; `api.v1.ui.part.*` factories with options and variants; `field()` storage bindings; a single `render()` with targeted refreshes; reusable `confirm()`/`notify()`. Shorthand token values are confirmed working.
+- **`NovelAI_UI_Component_System.md`:** namespace and `id()`; `COLOR`/`SPACE`/`RADIUS` tokens; presets combined with `sx()`; `api.v1.ui.part.*` factories with options and variants; `field()` storage bindings; a single `render()` with targeted refreshes; reusable `confirm()`/`notify()`.
 - **`NovelAI_JSX_Guide.md`:** mounting, globals, hooks vs. `createStore`, the element whitelist, styling with `var(--theme-<key>)` (confirmed), event snapshots and `captureEvents`, canvas, and type-checking. JSX syntax is confirmed working.
 - **`NovelAI_JSX_Types.d.ts`:** the community-shared typings, with `declare` modifiers and a small element-name shim added so tsc accepts them. No change in meaning.
 - **`NovelAI_Script_Types_Experimental.d.ts`:** unchanged from the shared file.
@@ -125,7 +150,6 @@ Replaced with the current official file. The main changes since v1:
 
 - Inputs bound with `temp:` save without pressing Enter.
 - A text-only `row` with a valid `alignment` opens in a modal.
-- Theme tokens work inside shorthand values (`border: '1px solid bg2'`).
 - JSX syntax (`<b>`, `<div><b>…</b></div>`) mounts in a `jsx` part.
 - `var(--theme-textHeadings)` applies the heading color inside JSX.
 - `xialong-v1` is a valid model ID and is Opus-only.

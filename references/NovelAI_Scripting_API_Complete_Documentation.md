@@ -577,8 +577,9 @@ A simple wrapper for applying custom styles.
 {
   type: 'container',
   style: {
-    border: '1px solid #ff0000',
-    padding: '10px'
+    border: '1px solid',
+    borderColor: '#ff0000',
+    padding: '12px'
   },
   content: [
     { type: 'text', text: 'Custom-styled container.' }
@@ -768,8 +769,8 @@ Most UI Parts support the `style` property with CSS properties in camelCase. The
   style: {
     backgroundColor: 'bg1',      // theme token — adapts to active theme
     color: 'textHeadings',        // theme token
-    padding: '10px',
-    borderRadius: '5px'
+    padding: '12px',
+    borderRadius: '4px'
   }
 }
 ```
@@ -807,9 +808,10 @@ To avoid duplicating inline style blocks throughout the script, define style con
 // ── Style presets ──────────────────────────────────────────────
 const CARD_STYLE: Record<string, string> = {
     backgroundColor: 'bg1',
-    border: '1px solid bg2',
+    border: '1px solid',         // width + style only
+    borderColor: 'bg2',          // color always on its own (tokens don't apply inside the shorthand)
     borderRadius: '6px',
-    padding: '10px',
+    padding: '12px',
     margin: '6px 0',
 };
 
@@ -1227,6 +1229,61 @@ Scripts have several limits on how frequently and how much they can generate. Th
 
 Use the `api.v1.script` token-budget helpers (`getAllowedInput`/`getAllowedOutput`, `getTimeUntilAllowedInput`/`getTimeUntilAllowedOutput`, `waitForAllowedInput`/`waitForAllowedOutput`, `countUncachedInputTokens`) to work within these limits, and `api.v1.createRolloverHelper` to manage a sliding context window.
 
+### Check the Input Size Before Every Generation
+
+Measure the prompt before every `api.v1.generate()` call that sends story or document text, and decide what happens when it doesn't fit. A prompt that's too large fails or gets cut somewhere you didn't choose, and a large one can also use up the script's input-token budget (see Generation Limit above).
+
+- **Fit:** the prompt plus the requested `max_tokens` must fit in `await api.v1.maxTokens(model)`. Leave a small margin for the chat template's per-message tokens, which the tokenizer count doesn't include.
+- **Over budget:** trim deliberately (usually the oldest document text first), or tell the user and stop. Never send and hope.
+- **Budget:** `api.v1.script.countUncachedInputTokens(messages)` against `api.v1.script.getAllowedInput()` tells you whether the call will be rate-limited; wait with `waitForAllowedInput()` or tell the user.
+- **Measure early:** scripts built around text generation, especially ones that read the document on purpose (summarizers, extractors, rewriters), should measure the context at the start of a run (or when their panel opens) and show the user how much will fit, instead of finding out on the first failed call.
+
+```typescript
+const TEMPLATE_MARGIN = 64; // rough allowance for chat-template tokens per request
+
+async function countTokens(messages: Message[], model: string): Promise<number> {
+    let total = 0;
+    for (const m of messages) {
+        total += (await api.v1.tokenizer.encode(m.content ?? '', model)).length;
+    }
+    return total;
+}
+
+/** Keeps the newest part of `docText` that fits next to the instructions. Returns null if nothing fits. */
+async function fitDocument(instructions: string, docText: string, model: string, maxOutput: number): Promise<string | null> {
+    const limit = (await api.v1.maxTokens(model)) - maxOutput - TEMPLATE_MARGIN;
+    const room = limit - (await countTokens([{ role: 'system', content: instructions }], model));
+    if (room <= 0) return null;
+    const tokens = await api.v1.tokenizer.encode(docText, model);
+    if (tokens.length <= room) return docText;
+    return api.v1.tokenizer.decode(tokens.slice(tokens.length - room), model); // drop the oldest text
+}
+
+async function summarize(docText: string): Promise<string | null> {
+    const model = 'glm-4-6';
+    const maxOutput = 300;
+    const instructions = 'Summarize the story so far in one paragraph.';
+    const fitted = await fitDocument(instructions, docText, model, maxOutput);
+    if (fitted === null) {
+        await api.v1.ui.toast('The instructions alone are too long for this model.', { type: 'error' });
+        return null;
+    }
+    if (fitted.length < docText.length) {
+        await api.v1.ui.toast('The story is longer than the context, so only the most recent part was summarized.', { type: 'warning' });
+    }
+    const messages: Message[] = [
+        { role: 'system', content: instructions },
+        { role: 'user', content: fitted },
+    ];
+    if (api.v1.script.countUncachedInputTokens(messages) > api.v1.script.getAllowedInput()) {
+        await api.v1.ui.toast('Waiting for the script\'s input-token budget to refill…', { type: 'info' });
+        await api.v1.script.waitForAllowedInput(api.v1.script.countUncachedInputTokens(messages));
+    }
+    const response = await api.v1.generate(messages, { model, max_tokens: maxOutput });
+    return response.choices[0]?.text ?? null;
+}
+```
+
 ---
 
 ## 10. Context Building
@@ -1368,7 +1425,8 @@ let entryId = await api.v1.lorebook.createEntry({
   id: api.v1.uuid(),  // Optional, generated if not provided
   text: 'Galena, the Witch of the Tower...',
   displayName: 'Galena',
-  keys: ['Galena', 'witch', 'tower'],
+  keys: ['Galena', 'witch', 'tower'],  // always set explicitly
+  forceActivation: false,              // always set explicitly ("Always On" in the UI)
   enabled: true,
   category: categoryId  // Optional
 });
@@ -1380,6 +1438,13 @@ let categoryId = await api.v1.lorebook.createCategory({
   enabled: true
 });
 ```
+
+**Always set `keys` and `forceActivation` explicitly when creating an entry.** Both are optional in the types, so an entry created without them can end up with no keys and not Always On, which means it never activates and nothing tells the user why. Decide which kind of entry it is:
+
+- **Keyed entry:** `keys: [...]` with at least one key, and `forceActivation: false`.
+- **Always-on entry:** `forceActivation: true`, and `keys: []` (or keys, if you also want them shown in the UI).
+
+If the keys come from model output or user input, check the array isn't empty before creating the entry, and fall back to the entry's display name or ask the user.
 
 ### Updating Lorebook Content
 
@@ -1727,7 +1792,7 @@ api.v1.editor.decorations.registerRules([
     id: "important-paragraphs",
     type: "node",
     match: /^IMPORTANT:/,
-    style: { borderLeft: "4px solid red", paddingLeft: "10px" }
+    style: { borderLeft: "4px solid red", paddingLeft: "12px" }
   }
 ]);
 

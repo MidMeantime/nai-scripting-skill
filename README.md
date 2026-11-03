@@ -160,6 +160,17 @@ Contributions, corrections, and additions are welcome! This is a community resou
    - How you verified the fix (ideally tested in NovelAI — note this in the PR)
    - The relevant section/file changed
 
+### Building the packages
+
+`novel-ai-scripting.zip` and `novel-ai-scripting.skill` are built from `SKILL.md`, `CHANGELOG.md`, and `references/`, so don't edit them by hand. A GitHub Action (`.github/workflows/build-packages.yml`) rebuilds and commits them whenever those files change on `main`, attaches them to every published release, and attaches them as a downloadable artifact on pull requests. To build them locally (Python 3.10+):
+
+```bash
+python scripts/build_packages.py           # build both packages
+python scripts/build_packages.py --check   # exit 1 if the committed packages are out of date
+```
+
+Builds are reproducible, so a local build and the Action's build of the same files are byte-identical.
+
 ### Guidelines
 
 - **Accuracy over coverage.** Every code example should type-check against the bundled `NovelAI_Script_Types.d.ts`. If it hasn't been verified in NovelAI, mark it as unverified.

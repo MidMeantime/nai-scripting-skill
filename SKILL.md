@@ -188,10 +188,11 @@ Define typed style objects at the top of your script and spread them onto UI par
 
 ```typescript
 const CARD_STYLE: Record<string, string> = {
-    backgroundColor: 'bg1',      // theme token
-    border: '1px solid bg2',     // theme token
+    backgroundColor: 'bg1',
+    border: '1px solid',         // width + style only
+    borderColor: 'bg2',          // color always on its own (tokens don't apply inside the shorthand)
     borderRadius: '6px',
-    padding: '10px',
+    padding: '12px',
     margin: '6px 0',
 };
 
@@ -228,6 +229,12 @@ Instead of hardcoding hex colors, use NovelAI theme token strings directly as va
 | `'field'` | Form / input field font family |
 
 > **⚠️ Note on `'primary'`**: NovelAI does **NOT** have a `'primary'` or `'error'` theme token. Using `color: 'primary'` produces invalid CSS that browsers ignore. For active/highlighted surfaces use `'bg3'`, for high-contrast accents use `'textHeadings'`, or supply explicit hex/rgba color strings (e.g. `'#90caf9'`).
+
+### CSS Rules
+
+- **Borders:** never put a color in the `border` shorthand. A theme token there doesn't apply (`border: '1px solid bg2'` doesn't work). Write `border: '1px solid'` (or `borderWidth` + `borderStyle`) and put the color in its own `borderColor`, after the shorthand. Variants then override just `borderColor`.
+- **4px / 8px grid:** every size, spacing, and radius value is a multiple of 4 or 8 pixels (`4px`, `8px`, `12px`, `16px`, `24px`, `32px`…), or one of the small half-steps `1px`, `2px`, and `6px` for borders, tight gaps, and small radii. Rem equivalents work too (`2px = 0.125rem`, `4px = 0.25rem`, `6px = 0.375rem`, `8px = 0.5rem`, `12px = 0.75rem`, `16px = 1rem`, `24px = 1.5rem`…). Values like `5px` or `10px` are off the grid. Pick px or rem for a script and don't mix them. Keep the scale in constants (`SPACE`, `RADIUS` in the component system) instead of typing raw values.
+- **Every element is restyleable from one place:** it comes from a reusable factory, or it gets its own named style preset (`S.something`) and a namespaced `id`. Standard UI parts have no `class`/`className` prop (only `jsx` parts do), so the preset name plays the role of a class. No one-off inline style objects in render code.
 
 ### Factory Functions (Replaces cloneNode / Templates)
 
@@ -294,6 +301,7 @@ await api.v1.ui.update([{
 > - Style values are inline styles only: no pseudo-classes (`:hover`) or media queries, and URLs are stripped from style values.
 > - Always cast UI Part objects with `type: '...' as const` and `as any` to avoid the worker compiler's union-type errors.
 > - Never use `api.v1.ui.register()` for panels — always use `api.v1.ui.update()` (creates-or-updates, survives disable/re-enable cycles).
+> - **Never re-render the whole panel from an input's `onChange`** (text, multiline, number, slider, checkbox, code editor). It loses focus, drops keystrokes, resets anything open, and breaks slider callbacks. Re-render as little as possible: values shown as text use `{{temp:…}}`/`{{story:…}}` templates, single parts use `api.v1.ui.updateParts()`, and a full `ui.update()` is only for structural changes, triggered from a button or `onSubmit`. See guidelines pitfall 19.
 
 ---
 
@@ -307,3 +315,10 @@ await api.v1.ui.update([{
 | **Erato** | — (not scriptable) | Llama-3-70B Finetune | 8,192 tokens | — | 8,192 tokens |
 
 *Note for API Generation:* **Default to `glm-4-6`.** It follows instructions very well and works on every tier, so it is the right choice for summaries, extraction, structured/JSON output, and other instruction-style tasks. `xialong-v1` is meant for story prose, not instruction-following, and it is **Opus-only**. Use it for prose output only when the user's story is already set to it (`(await api.v1.generationParameters.get()).model === 'xialong-v1'`), and never upgrade to it on your own. Script generation (and the `onContextBuilt`/`onResponse` hooks) only works with models on the OpenAI-like completions endpoint, so Kayra and Erato cannot be used from `api.v1.generate`. Query limits at runtime with `await api.v1.maxTokens(model)` and `await api.v1.rolloverTokens(model)` instead of hardcoding them.
+
+---
+
+## 8. Generation & Lorebook Rules
+
+- **Check the input size before every `generate()`** that sends story or document text. Count with `(await api.v1.tokenizer.encode(text, model)).length`; the prompt plus the requested `max_tokens` (plus a small margin for the chat template) must fit in `await api.v1.maxTokens(model)`. When it doesn't fit, trim on purpose (usually the oldest text first) or tell the user and stop. Scripts built around text generation, especially ones that read the document, should measure the context at the start of a run and show the user how much will fit. Also check `api.v1.script.countUncachedInputTokens(messages)` against `getAllowedInput()` for the rate limit. Full example: "Check the Input Size Before Every Generation" in the [API docs](./references/NovelAI_Scripting_API_Complete_Documentation.md).
+- **Set `keys` and `forceActivation` explicitly** whenever a script creates a lorebook entry. Both are optional, so an entry created without them can have no keys and not be Always On, and it silently never activates. Keyed entry: non-empty `keys`, `forceActivation: false`. Always-on entry: `forceActivation: true`.
