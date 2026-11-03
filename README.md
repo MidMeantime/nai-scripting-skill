@@ -183,7 +183,7 @@ Builds are reproducible, so a local build and the Action's build of the same fil
 ## Links
 
 - [NovelAI official script examples](https://github.com/NovelAI/novelai-script-examples)
-- NovelAI scripting documentation](https://docs.novelai.net/en/scripting)
+- [NovelAI scripting documentation](https://docs.novelai.net/en/scripting)
 - Feedback & questions: [GitHub Issues](https://github.com/MidMeantime/nai-scripting-skill/issues) or the NovelAI Discord
 - My other scripts: https://storyscriptvault.com/users/MidMeantime
 - Like my work? [buymeacoffee.com/midmeantime](https://buymeacoffee.com/midmeantime)
